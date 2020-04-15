@@ -29,7 +29,7 @@ from prometheus_client import start_wsgi_server, Counter, Gauge
 
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string('listen', ':9413', 'Address:port to listen on')
+flags.DEFINE_string('listen', ':9714', 'Address:port to listen on')
 flags.DEFINE_string('address', 'fritz.box', 'Hostname/IP address of FritzBox')
 flags.DEFINE_string('username', '', 'Username to authenticate with')
 flags.DEFINE_string('password', '', 'Password to authenticate with')
