@@ -1,0 +1,23 @@
+[package]
+name = "pomfritz"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+env_logger = "0.10.0"
+log = "0.4.20"
+md5 = "0.7.0"
+metrics = "0.21.1"
+metrics-exporter-prometheus = "0.12.1"
+openssl = { version = "0.10.57", features = ["vendored"] }
+reqwest = "0.11.20"
+rocket = "=0.5.0-rc.3"
+serde = "1.0.188"
+serde-this-or-that = "0.4.2"
+serde-xml-rs = "0.6.0"
+serde_derive = "1.0.188"
+serde_json = "1.0.106"
+tokio = { version = "1.32.0", features = ["rt", "macros", "rt-multi-thread"] }
+toml = "0.7.8"
