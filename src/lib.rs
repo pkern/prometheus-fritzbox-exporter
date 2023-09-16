@@ -148,7 +148,7 @@ const LOGIN_URL: &str = "http://fritz.box/login_sid.lua";
 const DATA_URL: &str = "http://fritz.box/data.lua";
 
 // TODO: Make this a struct that includes the validity of the sid, to avoid frequent logins.
-async fn login(config: FritzboxConfig) -> Result<String, Box<dyn std::error::Error>> {
+async fn login(config: &FritzboxConfig) -> Result<String, Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
     let login_url = String::from(LOGIN_URL);
     let res = client.get(&login_url)
@@ -183,7 +183,6 @@ async fn fetch<T: for<'de> serde::Deserialize<'de>>(sid: &str, page: &str) -> Re
     let res = client.post(&data_url)
         .form(&[("xhr", "1"),
                 ("sid", &sid),
-                ("lang", "en"),  // TODO: This doesn't seem to work.
                 ("page", page),
                 ("xhrId", "all")])
         .send()
@@ -200,7 +199,7 @@ pub async fn fetch_data() {
     let config: FritzboxConfig = toml::from_str(&contents)
         .expect("Could not parse configuration file");
     assert_eq!(config.user, "pkern");
-    let sid = login(config)
+    let sid = login(&config)
         .await
         .expect("Could not log into Fritzbox");
 
@@ -215,19 +214,20 @@ pub async fn fetch_data() {
     let data = fetch::<DocsisChannelDataWrapper>(&sid, "docInfo")
         .await
         .expect("Could not fetch channel information");
-    const CHANNEL: &'static str = "channel";
-    const PROTOCOL: &'static str = "protocol";
+    static CHANNEL: &str = "channel";
+    static PROTOCOL: &str = "protocol";
+    static MODULATION: &str = "modulation";
     for channel in data.data.channel_ds.docsis31.into_iter() {
-        const DOCSIS31: &'static str = "docsis31";
+        static DOCSIS31: &str = "docsis31";
         gauge!("docsis_channel_non_correctable_errors", f64::from(channel.non_corr_errors), PROTOCOL => DOCSIS31, CHANNEL => format!("{}", channel.channel_id));
-        gauge!("docsis_channel_power_level", channel.power_level, PROTOCOL => DOCSIS31, CHANNEL => format!("{}", channel.channel_id));
+        gauge!("docsis_channel_power_level", channel.power_level, PROTOCOL => DOCSIS31, CHANNEL => format!("{}", channel.channel_id), MODULATION => format!("{}", channel.modulation));
         gauge!("docsis_channel_mer", f64::from(u32::try_from(channel.mer).unwrap_or(0)), PROTOCOL => DOCSIS31, CHANNEL => format!("{}", channel.channel_id));
     };
     for channel in data.data.channel_ds.docsis30.into_iter() {
-        const DOCSIS30: &'static str = "docsis30";
+        static DOCSIS30: &str = "docsis30";
         gauge!("docsis_channel_non_correctable_errors", f64::from(channel.non_corr_errors), PROTOCOL => DOCSIS30, CHANNEL => format!("{}", channel.channel_id));
         gauge!("docsis_channel_correctable_errors", f64::from(channel.corr_errors), PROTOCOL => DOCSIS30, CHANNEL => format!("{}", channel.channel_id));
-        gauge!("docsis_channel_power_level", channel.power_level, PROTOCOL => DOCSIS30, CHANNEL => format!("{}", channel.channel_id));
+        gauge!("docsis_channel_power_level", channel.power_level, PROTOCOL => DOCSIS30, CHANNEL => format!("{}", channel.channel_id), MODULATION => format!("{}", channel.modulation));
         gauge!("docsis_channel_mse", channel.mse, PROTOCOL => DOCSIS30, CHANNEL => format!("{}", channel.channel_id));
     };
 
