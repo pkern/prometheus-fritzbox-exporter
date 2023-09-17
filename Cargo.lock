@@ -1015,7 +1015,7 @@ dependencies = [
  "md5",
  "metrics",
  "metrics-exporter-prometheus",
- "openssl",
+ "native-tls",
  "reqwest",
  "rocket",
  "serde",
