@@ -1,13 +1,14 @@
-use pomfritz::*;
-use rocket::State;
-use rocket::outcome::{Outcome, try_outcome};
-use rocket::request::{self, Request, FromRequest};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
+use pomfritz::*;
+use rocket::outcome::{try_outcome, Outcome};
+use rocket::request::{self, FromRequest, Request};
+use rocket::State;
 use std::fs;
 use std::mem::drop;
 use tokio::sync::RwLock;
 
-#[macro_use] extern crate rocket;
+#[macro_use]
+extern crate rocket;
 
 struct MyState {
     prometheus_handle: PrometheusHandle,
@@ -25,9 +26,11 @@ impl<'r> FromRequest<'r> for UpdateSession {
         let my_state = try_outcome!(req.guard::<&State<MyState>>().await);
         let current_session = my_state.session.read().await;
         if current_session.still_valid() {
-          return Outcome::Success(UpdateSession)
+            return Outcome::Success(UpdateSession);
         }
-        let new_session = login(&my_state.config, Some(&current_session)).await.unwrap();
+        let new_session = login(&my_state.config, Some(&current_session))
+            .await
+            .unwrap();
         drop(current_session);
         let mut writable_session = my_state.session.write().await;
         *writable_session = new_session;
@@ -46,10 +49,9 @@ async fn handle(state: &State<MyState>, _a: UpdateSession) -> String {
 async fn rocket() -> _ {
     env_logger::init();
 
-    let contents = fs::read_to_string("config.toml")
-        .expect("Could not read configuration file");
-    let config: FritzboxConfig = toml::from_str(&contents)
-        .expect("Could not parse configuration file");
+    let contents = fs::read_to_string("config.toml").expect("Could not read configuration file");
+    let config: FritzboxConfig =
+        toml::from_str(&contents).expect("Could not parse configuration file");
 
     let session = login(&config, None)
         .await
@@ -58,11 +60,9 @@ async fn rocket() -> _ {
     let prometheus_handle = PrometheusBuilder::new()
         .install_recorder()
         .expect("Could not build Prometheus recorder");
-    rocket::build()
-        .mount("/", routes![handle])
-        .manage(MyState {
-            prometheus_handle: prometheus_handle,
-            session: RwLock::new(session),
-            config: config,
-        })
+    rocket::build().mount("/", routes![handle]).manage(MyState {
+        prometheus_handle: prometheus_handle,
+        session: RwLock::new(session),
+        config: config,
+    })
 }

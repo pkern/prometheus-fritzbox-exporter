@@ -158,9 +158,12 @@ struct DocsisStatisticsDataWrapper {
 
 const LOGIN_URL: &str = "http://fritz.box/login_sid.lua";
 const DATA_URL: &str = "http://fritz.box/data.lua";
-const SESSION_TIMEOUT: Duration = Duration::from_secs(15*60);  // Technically 20 min
+const SESSION_TIMEOUT: Duration = Duration::from_secs(15 * 60); // Technically 20 min
 
-pub async fn login<'a>(config: &FritzboxConfig, session: Option<&FritzboxSession>) -> Result<FritzboxSession, Box<dyn std::error::Error>> {
+pub async fn login<'a>(
+    config: &FritzboxConfig,
+    session: Option<&FritzboxSession>,
+) -> Result<FritzboxSession, Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
 
     // Check if the session is still valid, in which case it is extended by the
@@ -168,21 +171,26 @@ pub async fn login<'a>(config: &FritzboxConfig, session: Option<&FritzboxSession
     match session {
         Some(session) => {
             debug!("Checking if session is still valid...");
-            let res = client.get(LOGIN_URL)
+            let res = client
+                .get(LOGIN_URL)
                 .query(&[("sid", &session.sid)])
                 .send()
                 .await?;
             let content = res.text().await?;
             let info: SessionInfo = serde_xml_rs::from_str(&content)?;
             if info.sid == session.sid {
-                return Ok(FritzboxSession{sid: info.sid, valid_until: Instant::now().add(SESSION_TIMEOUT)})
+                return Ok(FritzboxSession {
+                    sid: info.sid,
+                    valid_until: Instant::now().add(SESSION_TIMEOUT),
+                });
             }
-        },
-        None => {},
+        }
+        None => {}
     }
 
     debug!("Getting challenge...");
-    let res = client.get(LOGIN_URL)
+    let res = client
+        .get(LOGIN_URL)
         .query(&[("username", &config.user)])
         .send()
         .await?;
@@ -197,30 +205,47 @@ pub async fn login<'a>(config: &FritzboxConfig, session: Option<&FritzboxSession
         .collect();
     let outer_response: String = format!("{0}-{1:x}", info.challenge, md5::compute(inner_response));
     debug!("Logging in...");
-    let res = client.get(LOGIN_URL)
-        .query(&[("username", &config.user),
-                 ("response", &outer_response)])
+    let res = client
+        .get(LOGIN_URL)
+        .query(&[("username", &config.user), ("response", &outer_response)])
         .send()
         .await?;
     assert_eq!(res.status(), 200);
     let content = res.text().await?;
     let info: SessionInfo = serde_xml_rs::from_str(&content)?;
-    assert!("0000000000000000" != info.sid, "Password incorrect or Fritzbox denied access due to ratelimiting");
-    Ok(FritzboxSession{sid: info.sid, valid_until: Instant::now().add(SESSION_TIMEOUT)})
+    assert!(
+        "0000000000000000" != info.sid,
+        "Password incorrect or Fritzbox denied access due to ratelimiting"
+    );
+    Ok(FritzboxSession {
+        sid: info.sid,
+        valid_until: Instant::now().add(SESSION_TIMEOUT),
+    })
 }
 
-async fn fetch<T: for<'de> serde::Deserialize<'de>>(session: &FritzboxSession, page: &str) -> Result<T, Box<dyn std::error::Error>> {
-    debug!("Time left: {:?}", session.valid_until.saturating_duration_since(Instant::now()));
+async fn fetch<T: for<'de> serde::Deserialize<'de>>(
+    session: &FritzboxSession,
+    page: &str,
+) -> Result<T, Box<dyn std::error::Error>> {
+    debug!(
+        "Time left: {:?}",
+        session
+            .valid_until
+            .saturating_duration_since(Instant::now())
+    );
 
     let client = reqwest::Client::new();
     let data_url = String::from(DATA_URL);
-    let res = client.post(&data_url)
-        .form(&[("xhr", "1"),
-                ("sid", &session.sid),
-                ("page", page),
-                ("xhrId", "all")])
+    let res = client
+        .post(&data_url)
+        .form(&[
+            ("xhr", "1"),
+            ("sid", &session.sid),
+            ("page", page),
+            ("xhrId", "all"),
+        ])
         .send()
-        .await?; 
+        .await?;
     assert_eq!(res.status(), 200);
     let content = res.text().await?;
     Ok(serde_json::from_str(&content)?)
@@ -232,8 +257,14 @@ pub async fn fetch_data(session: &FritzboxSession) {
     let data = fetch::<DocsisConnectionDataWrapperWrapper>(&session, "docOv")
         .await
         .expect("Could not fetch channel overview");
-    gauge!("docsis_connection_downstream_count", f64::from(data.data.connection_data.ds_count + data.data.connection_data.ds_count_second));
-    gauge!("docsis_connection_upstream_count", f64::from(data.data.connection_data.us_count + data.data.connection_data.us_count_second));
+    gauge!(
+        "docsis_connection_downstream_count",
+        f64::from(data.data.connection_data.ds_count + data.data.connection_data.ds_count_second)
+    );
+    gauge!(
+        "docsis_connection_upstream_count",
+        f64::from(data.data.connection_data.us_count + data.data.connection_data.us_count_second)
+    );
 
     let data = fetch::<DocsisChannelDataWrapper>(&session, "docInfo")
         .await
@@ -246,18 +277,18 @@ pub async fn fetch_data(session: &FritzboxSession) {
         gauge!("docsis_channel_non_correctable_errors", f64::from(channel.non_corr_errors), PROTOCOL => DOCSIS31, CHANNEL => format!("{}", channel.channel_id));
         gauge!("docsis_channel_power_level", channel.power_level, PROTOCOL => DOCSIS31, CHANNEL => format!("{}", channel.channel_id), MODULATION => format!("{}", channel.modulation));
         gauge!("docsis_channel_mer", f64::from(u32::try_from(channel.mer).unwrap_or(0)), PROTOCOL => DOCSIS31, CHANNEL => format!("{}", channel.channel_id));
-    };
+    }
     for channel in data.data.channel_ds.docsis30.into_iter() {
         static DOCSIS30: &str = "docsis30";
         gauge!("docsis_channel_non_correctable_errors", f64::from(channel.non_corr_errors), PROTOCOL => DOCSIS30, CHANNEL => format!("{}", channel.channel_id));
         gauge!("docsis_channel_correctable_errors", f64::from(channel.corr_errors), PROTOCOL => DOCSIS30, CHANNEL => format!("{}", channel.channel_id));
         gauge!("docsis_channel_power_level", channel.power_level, PROTOCOL => DOCSIS30, CHANNEL => format!("{}", channel.channel_id), MODULATION => format!("{}", channel.modulation));
         gauge!("docsis_channel_mse", channel.mse, PROTOCOL => DOCSIS30, CHANNEL => format!("{}", channel.channel_id));
-    };
+    }
 
     /*let data = fetch::<DocsisStatisticsDataWrapper>(&session, "docStat")
-        .await
-        .expect("Could not fetch channel statistics");*/
+    .await
+    .expect("Could not fetch channel statistics");*/
 
     debug!("Fetching complete.")
 }
