@@ -2,12 +2,24 @@ use log::debug;
 use metrics::gauge;
 use serde_derive::Deserialize;
 use serde_this_or_that::{as_f64, as_u64};
-use std::fs;
+use std::ops::Add;
+use std::time::{Duration, Instant};
 
 #[derive(Deserialize)]
-struct FritzboxConfig {
+pub struct FritzboxConfig {
     user: String,
     password: String,
+}
+
+pub struct FritzboxSession {
+    sid: String,
+    valid_until: Instant,
+}
+
+impl FritzboxSession {
+    pub fn still_valid(&self) -> bool {
+        self.valid_until.saturating_duration_since(Instant::now()) > Duration::ZERO
+    }
 }
 
 #[derive(Deserialize)]
@@ -146,12 +158,31 @@ struct DocsisStatisticsDataWrapper {
 
 const LOGIN_URL: &str = "http://fritz.box/login_sid.lua";
 const DATA_URL: &str = "http://fritz.box/data.lua";
+const SESSION_TIMEOUT: Duration = Duration::from_secs(15*60);  // Technically 20 min
 
-// TODO: Make this a struct that includes the validity of the sid, to avoid frequent logins.
-async fn login(config: &FritzboxConfig) -> Result<String, Box<dyn std::error::Error>> {
+pub async fn login<'a>(config: &FritzboxConfig, session: Option<&FritzboxSession>) -> Result<FritzboxSession, Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
-    let login_url = String::from(LOGIN_URL);
-    let res = client.get(&login_url)
+
+    // Check if the session is still valid, in which case it is extended by the
+    // check.
+    match session {
+        Some(session) => {
+            debug!("Checking if session is still valid...");
+            let res = client.get(LOGIN_URL)
+                .query(&[("sid", &session.sid)])
+                .send()
+                .await?;
+            let content = res.text().await?;
+            let info: SessionInfo = serde_xml_rs::from_str(&content)?;
+            if info.sid == session.sid {
+                return Ok(FritzboxSession{sid: info.sid, valid_until: Instant::now().add(SESSION_TIMEOUT)})
+            }
+        },
+        None => {},
+    }
+
+    debug!("Getting challenge...");
+    let res = client.get(LOGIN_URL)
         .query(&[("username", &config.user)])
         .send()
         .await?;
@@ -165,7 +196,8 @@ async fn login(config: &FritzboxConfig) -> Result<String, Box<dyn std::error::Er
         .flatten()
         .collect();
     let outer_response: String = format!("{0}-{1:x}", info.challenge, md5::compute(inner_response));
-    let res = client.get(&login_url)
+    debug!("Logging in...");
+    let res = client.get(LOGIN_URL)
         .query(&[("username", &config.user),
                  ("response", &outer_response)])
         .send()
@@ -174,15 +206,17 @@ async fn login(config: &FritzboxConfig) -> Result<String, Box<dyn std::error::Er
     let content = res.text().await?;
     let info: SessionInfo = serde_xml_rs::from_str(&content)?;
     assert!("0000000000000000" != info.sid, "Password incorrect or Fritzbox denied access due to ratelimiting");
-    Ok(info.sid)
+    Ok(FritzboxSession{sid: info.sid, valid_until: Instant::now().add(SESSION_TIMEOUT)})
 }
 
-async fn fetch<T: for<'de> serde::Deserialize<'de>>(sid: &str, page: &str) -> Result<T, Box<dyn std::error::Error>> {
+async fn fetch<T: for<'de> serde::Deserialize<'de>>(session: &FritzboxSession, page: &str) -> Result<T, Box<dyn std::error::Error>> {
+    debug!("Time left: {:?}", session.valid_until.saturating_duration_since(Instant::now()));
+
     let client = reqwest::Client::new();
     let data_url = String::from(DATA_URL);
     let res = client.post(&data_url)
         .form(&[("xhr", "1"),
-                ("sid", &sid),
+                ("sid", &session.sid),
                 ("page", page),
                 ("xhrId", "all")])
         .send()
@@ -192,26 +226,16 @@ async fn fetch<T: for<'de> serde::Deserialize<'de>>(sid: &str, page: &str) -> Re
     Ok(serde_json::from_str(&content)?)
 }
 
-pub async fn fetch_data() {
-    debug!("Logging in...");
-    let contents = fs::read_to_string("config.toml")
-        .expect("Could not read configuration file");
-    let config: FritzboxConfig = toml::from_str(&contents)
-        .expect("Could not parse configuration file");
-    assert_eq!(config.user, "pkern");
-    let sid = login(&config)
-        .await
-        .expect("Could not log into Fritzbox");
-
+pub async fn fetch_data(session: &FritzboxSession) {
     debug!("Fetching data...");
 
-    let data = fetch::<DocsisConnectionDataWrapperWrapper>(&sid, "docOv")
+    let data = fetch::<DocsisConnectionDataWrapperWrapper>(&session, "docOv")
         .await
         .expect("Could not fetch channel overview");
     gauge!("docsis_connection_downstream_count", f64::from(data.data.connection_data.ds_count + data.data.connection_data.ds_count_second));
     gauge!("docsis_connection_upstream_count", f64::from(data.data.connection_data.us_count + data.data.connection_data.us_count_second));
 
-    let data = fetch::<DocsisChannelDataWrapper>(&sid, "docInfo")
+    let data = fetch::<DocsisChannelDataWrapper>(&session, "docInfo")
         .await
         .expect("Could not fetch channel information");
     static CHANNEL: &str = "channel";
@@ -231,9 +255,9 @@ pub async fn fetch_data() {
         gauge!("docsis_channel_mse", channel.mse, PROTOCOL => DOCSIS30, CHANNEL => format!("{}", channel.channel_id));
     };
 
-    let data = fetch::<DocsisStatisticsDataWrapper>(&sid, "docStat")
+    /*let data = fetch::<DocsisStatisticsDataWrapper>(&session, "docStat")
         .await
-        .expect("Could not fetch channel statistics");
+        .expect("Could not fetch channel statistics");*/
 
     debug!("Fetching complete.")
 }
