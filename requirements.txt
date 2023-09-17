@@ -1,0 +1,5 @@
+absl-py
+cachetools
+fritzconnection
+inflection
+prometheus_client
