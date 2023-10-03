@@ -272,18 +272,51 @@ pub async fn fetch_data(session: &FritzboxSession) {
     static CHANNEL: &str = "channel";
     static PROTOCOL: &str = "protocol";
     static MODULATION: &str = "modulation";
+    static DIRECTION: &str = "direction";
+    static UPSTREAM: &str = "upstream";
+    static DOWNSTREAM: &str = "downstream";
     for channel in data.data.channel_ds.docsis31.into_iter() {
         static DOCSIS31: &str = "docsis31";
-        gauge!("docsis_channel_non_correctable_errors", f64::from(channel.non_corr_errors), PROTOCOL => DOCSIS31, CHANNEL => format!("{}", channel.channel_id));
-        gauge!("docsis_channel_power_level", channel.power_level, PROTOCOL => DOCSIS31, CHANNEL => format!("{}", channel.channel_id), MODULATION => format!("{}", channel.modulation));
-        gauge!("docsis_channel_mer", f64::from(u32::try_from(channel.mer).unwrap_or(0)), PROTOCOL => DOCSIS31, CHANNEL => format!("{}", channel.channel_id));
+        gauge!("docsis_channel_non_correctable_errors",
+            f64::from(channel.non_corr_errors),
+            PROTOCOL => DOCSIS31,
+            DIRECTION => DOWNSTREAM,
+            CHANNEL => format!("{}", channel.channel_id));
+        gauge!("docsis_channel_power_level",
+            channel.power_level,
+            PROTOCOL => DOCSIS31,
+            DIRECTION => DOWNSTREAM,
+            CHANNEL => format!("{}", channel.channel_id),
+            MODULATION => format!("{}", channel.modulation));
+        gauge!("docsis_channel_mer",
+            f64::from(u32::try_from(channel.mer).unwrap_or(0)),
+            PROTOCOL => DOCSIS31,
+            DIRECTION => DOWNSTREAM,
+            CHANNEL => format!("{}", channel.channel_id));
     }
     for channel in data.data.channel_ds.docsis30.into_iter() {
         static DOCSIS30: &str = "docsis30";
-        gauge!("docsis_channel_non_correctable_errors", f64::from(channel.non_corr_errors), PROTOCOL => DOCSIS30, CHANNEL => format!("{}", channel.channel_id));
-        gauge!("docsis_channel_correctable_errors", f64::from(channel.corr_errors), PROTOCOL => DOCSIS30, CHANNEL => format!("{}", channel.channel_id));
-        gauge!("docsis_channel_power_level", channel.power_level, PROTOCOL => DOCSIS30, CHANNEL => format!("{}", channel.channel_id), MODULATION => format!("{}", channel.modulation));
-        gauge!("docsis_channel_mse", channel.mse, PROTOCOL => DOCSIS30, CHANNEL => format!("{}", channel.channel_id));
+        gauge!("docsis_channel_non_correctable_errors",
+            f64::from(channel.non_corr_errors),
+            PROTOCOL => DOCSIS30,
+            DIRECTION => DOWNSTREAM,
+            CHANNEL => format!("{}", channel.channel_id));
+        gauge!("docsis_channel_correctable_errors",
+            f64::from(channel.corr_errors),
+            PROTOCOL => DOCSIS30,
+            DIRECTION => DOWNSTREAM,
+            CHANNEL => format!("{}", channel.channel_id));
+        gauge!("docsis_channel_power_level",
+            channel.power_level,
+            PROTOCOL => DOCSIS30,
+            DIRECTION => DOWNSTREAM,
+            CHANNEL => format!("{}", channel.channel_id),
+            MODULATION => format!("{}", channel.modulation));
+        gauge!("docsis_channel_mse",
+            channel.mse,
+            PROTOCOL => DOCSIS30,
+            DIRECTION => DOWNSTREAM,
+            CHANNEL => format!("{}", channel.channel_id));
     }
 
     /*let data = fetch::<DocsisStatisticsDataWrapper>(&session, "docStat")
