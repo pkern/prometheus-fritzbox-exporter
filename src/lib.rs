@@ -275,8 +275,9 @@ pub async fn fetch_data(session: &FritzboxSession) {
     static DIRECTION: &str = "direction";
     static UPSTREAM: &str = "upstream";
     static DOWNSTREAM: &str = "downstream";
+    static DOCSIS31: &str = "docsis31";
+    static DOCSIS30: &str = "docsis30";
     for channel in data.data.channel_ds.docsis31.into_iter() {
-        static DOCSIS31: &str = "docsis31";
         gauge!("docsis_channel_non_correctable_errors",
             f64::from(channel.non_corr_errors),
             PROTOCOL => DOCSIS31,
@@ -295,7 +296,6 @@ pub async fn fetch_data(session: &FritzboxSession) {
             CHANNEL => format!("{}", channel.channel_id));
     }
     for channel in data.data.channel_ds.docsis30.into_iter() {
-        static DOCSIS30: &str = "docsis30";
         gauge!("docsis_channel_non_correctable_errors",
             f64::from(channel.non_corr_errors),
             PROTOCOL => DOCSIS30,
@@ -317,6 +317,28 @@ pub async fn fetch_data(session: &FritzboxSession) {
             PROTOCOL => DOCSIS30,
             DIRECTION => DOWNSTREAM,
             CHANNEL => format!("{}", channel.channel_id));
+    }
+    for channel in data.data.channel_us.docsis31.into_iter() {
+        gauge!("docsis_channel_power_level",
+            channel.power_level,
+            PROTOCOL => DOCSIS31,
+            DIRECTION => UPSTREAM,
+            CHANNEL => format!("{}", channel.channel_id),
+            MODULATION => format!("{}", channel.modulation));
+        gauge!("docsis_channel_active_subcarriers",
+            f64::from(u32::try_from(channel.activesub).unwrap_or(0)),
+            PROTOCOL => DOCSIS31,
+            DIRECTION => UPSTREAM,
+            CHANNEL => format!("{}", channel.channel_id),
+            MODULATION => format!("{}", channel.modulation));
+    }
+    for channel in data.data.channel_us.docsis30.into_iter() {
+        gauge!("docsis_channel_power_level",
+            channel.power_level,
+            PROTOCOL => DOCSIS31,
+            DIRECTION => UPSTREAM,
+            CHANNEL => format!("{}", channel.channel_id),
+            MODULATION => format!("{}", channel.modulation));
     }
 
     /*let data = fetch::<DocsisStatisticsDataWrapper>(&session, "docStat")
