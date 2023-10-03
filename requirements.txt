@@ -3,3 +3,4 @@ cachetools
 fritzconnection
 inflection
 prometheus_client
+toml

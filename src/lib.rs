@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 #[derive(Deserialize)]
 pub struct FritzboxConfig {
-    user: String,
+    username: String,
     password: String,
 }
 
@@ -191,7 +191,7 @@ pub async fn login<'a>(
     debug!("Getting challenge...");
     let res = client
         .get(LOGIN_URL)
-        .query(&[("username", &config.user)])
+        .query(&[("username", &config.username)])
         .send()
         .await?;
     assert_eq!(res.status(), 200);
@@ -207,7 +207,7 @@ pub async fn login<'a>(
     debug!("Logging in...");
     let res = client
         .get(LOGIN_URL)
-        .query(&[("username", &config.user), ("response", &outer_response)])
+        .query(&[("username", &config.username), ("response", &outer_response)])
         .send()
         .await?;
     assert_eq!(res.status(), 200);

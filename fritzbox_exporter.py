@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import collections
+import os.path
 import signal
 import threading
 
@@ -31,6 +32,7 @@ from prometheus_client import start_wsgi_server, Counter, Gauge
 FLAGS = flags.FLAGS
 flags.DEFINE_string('listen', ':9714', 'Address:port to listen on')
 flags.DEFINE_string('address', 'fritz.box', 'Hostname/IP address of FritzBox')
+flags.DEFINE_string('config_file', 'config.toml', 'Path to TOML-based configuration file')
 flags.DEFINE_string('username', '', 'Username to authenticate with')
 flags.DEFINE_string('password', '', 'Password to authenticate with')
 flags.DEFINE_bool('verbose', False, 'Enable verbose logging')
@@ -49,6 +51,7 @@ flags.DEFINE_list(
     [
         'GetDefaultWEPKeyIndex',
         'GetLinkLayerMaxBitRates',
+        'GetPreferredAccessTechnology',
     ],
     'Actions to skip in enumeration')
 
@@ -81,7 +84,7 @@ def collect_actions(client):
 cache = TTLCache(maxsize=200, ttl=10)
 
 def hashkey(*args, **kwargs):
-    return args[0].service_name, args[0].action_name
+    return args[1].service_name, args[1].action_name
 
 
 @cachedmethod(cache=lambda _: cache, key=hashkey)
@@ -147,6 +150,15 @@ def main(unused_argv):
         import socketserver
         import socket
         socketserver.TCPServer.address_family = socket.AF_INET6
+    if FLAGS.config_file:
+        import toml
+        if os.path.exists(FLAGS.config_file):
+            with open(FLAGS.config_file, 'r') as f:
+                config = toml.load(f)
+                if 'username' in config:
+                    FLAGS.username = config['username']
+                if 'password' in config:
+                    FLAGS.password = config['password']
     client = fritzconnection.FritzConnection(
         address=FLAGS.address,
         user=FLAGS.username,
@@ -158,7 +170,7 @@ def main(unused_argv):
     variables = collect_variables(client, actions)
     logging.info(f'Collected {len(variables)} variables')
     address, port = FLAGS.listen.rsplit(':', 1)
-    start_wsgi_server(port=int(port), addr=address)
+    start_wsgi_server(port=int(port), addr=address if address else '127.0.0.1')
     logging.info(f'Listening on {FLAGS.listen}')
     for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(sig, quit)
