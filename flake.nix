@@ -5,8 +5,12 @@
     nixpkgs.follows = "cargo2nix/nixpkgs";
   };
 
-  outputs = inputs: with inputs;
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs = inputs: with inputs; {
+      nixosModules = rec {
+        prometheus-fritzbox-exporter = import ./nixos/prometheus-fritzbox-exporter.nix;
+        default = self.nixosModules.prometheus-fritzbox-exporter;
+      };
+    } // flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
           inherit system;
@@ -22,11 +26,6 @@
         packages = {
           pomfritz = (rustPkgs.workspace.pomfritz {});
           default = packages.pomfritz;
-        };
-
-        nixosModules = {
-          prometheus-fritzbox-exporter = import ./nixos/prometheus-fritzbox-exporter.nix;
-          default = nixosModules.prometheus-fritzbox-exporter;
         };
       }
     );
