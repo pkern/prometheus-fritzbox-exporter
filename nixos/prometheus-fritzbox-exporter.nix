@@ -8,7 +8,7 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
-    systemd.services."prometheus-pomfritz-exporter" = {
+    systemd.services."prometheus-pomfritz-exporter" = with lib; {
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" ];
 
