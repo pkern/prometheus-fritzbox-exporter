@@ -23,6 +23,11 @@
           pomfritz = (rustPkgs.workspace.pomfritz {});
           default = packages.pomfritz;
         };
+
+        nixosModules = {
+          prometheus-fritzbox-exporter = import ./nixos/prometheus-fritzbox-exporter.nix;
+          default = nixosModules.prometheus-fritzbox-exporter;
+        };
       }
     );
 }
