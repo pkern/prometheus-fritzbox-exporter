@@ -3,7 +3,7 @@
 let
   cfg = config.services.prometheus.exporters.pomfritz;
 in {
-  services.prometheus.exporters.pomfritz = with lib; {
+  options.services.prometheus.exporters.pomfritz = with lib; {
     enable = mkEnableOption "pomfritz Fritzbox exporter";
   };
 
