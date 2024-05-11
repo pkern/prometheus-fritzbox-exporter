@@ -4,14 +4,17 @@ use serde_derive::Deserialize;
 use serde_this_or_that::{as_f64, as_u64};
 use std::ops::Add;
 use std::time::{Duration, Instant};
+use url::Url;
 
 #[derive(Deserialize)]
 pub struct FritzboxConfig {
+    address: Url,
     username: String,
     password: String,
 }
 
 pub struct FritzboxSession {
+    address: Url,
     sid: String,
     valid_until: Instant,
 }
@@ -156,8 +159,6 @@ struct DocsisStatisticsDataWrapper {
     data: DocsisStatisticsData,
 }
 
-const LOGIN_URL: &str = "http://fritz.box/login_sid.lua";
-const DATA_URL: &str = "http://fritz.box/data.lua";
 const SESSION_TIMEOUT: Duration = Duration::from_secs(15 * 60); // Technically 20 min
 
 pub async fn login<'a>(
@@ -166,13 +167,15 @@ pub async fn login<'a>(
 ) -> Result<FritzboxSession, Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
 
+    let login_url = config.address.join("login_sid.lua")?;
+
     // Check if the session is still valid, in which case it is extended by the
     // check.
     match session {
         Some(session) => {
             debug!("Checking if session is still valid...");
             let res = client
-                .get(LOGIN_URL)
+                .get(login_url.clone())
                 .query(&[("sid", &session.sid)])
                 .send()
                 .await?;
@@ -180,6 +183,7 @@ pub async fn login<'a>(
             let info: SessionInfo = serde_xml_rs::from_str(&content)?;
             if info.sid == session.sid {
                 return Ok(FritzboxSession {
+                    address: config.address.clone(),
                     sid: info.sid,
                     valid_until: Instant::now().add(SESSION_TIMEOUT),
                 });
@@ -190,7 +194,7 @@ pub async fn login<'a>(
 
     debug!("Getting challenge...");
     let res = client
-        .get(LOGIN_URL)
+        .get(login_url.clone())
         .query(&[("username", &config.username)])
         .send()
         .await?;
@@ -206,7 +210,7 @@ pub async fn login<'a>(
     let outer_response: String = format!("{0}-{1:x}", info.challenge, md5::compute(inner_response));
     debug!("Logging in...");
     let res = client
-        .get(LOGIN_URL)
+        .get(login_url.clone())
         .query(&[("username", &config.username), ("response", &outer_response)])
         .send()
         .await?;
@@ -218,6 +222,7 @@ pub async fn login<'a>(
         "Password incorrect or Fritzbox denied access due to ratelimiting"
     );
     Ok(FritzboxSession {
+        address: config.address.clone(),
         sid: info.sid,
         valid_until: Instant::now().add(SESSION_TIMEOUT),
     })
@@ -235,9 +240,9 @@ async fn fetch<T: for<'de> serde::Deserialize<'de>>(
     );
 
     let client = reqwest::Client::new();
-    let data_url = String::from(DATA_URL);
+    let data_url = session.address.join("data.lua")?;
     let res = client
-        .post(&data_url)
+        .post(data_url)
         .form(&[
             ("xhr", "1"),
             ("sid", &session.sid),

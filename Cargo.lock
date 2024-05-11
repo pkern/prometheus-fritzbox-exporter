@@ -1010,6 +1010,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "toml 0.7.8",
+ "url",
 ]
 
 [[package]]
@@ -1926,6 +1927,7 @@ dependencies = [
  "form_urlencoded",
  "idna",
  "percent-encoding",
+ "serde",
 ]
 
 [[package]]
